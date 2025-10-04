@@ -1,20 +1,8 @@
-# Agent Security Bench (ASB): Formalizing and Benchmarking Attacks and Defenses in LLM-based Agents
+# Agent Security Bench (ASB)
 
 
-This is the official code for the **ICLR 2025** paper [Agent Security Bench (ASB): Formalizing and Benchmarking Attacks and Defenses in LLM-based Agents](https://arxiv.org/abs/2410.02644). The Agent Security Bench (ASB) aims to systematically formalize and comprehensively evaluate a broad spectrum of adversarial attacks and defensive strategies tailored to LLM-based agents across 10 diverse scenarios, including but not limited to academic advising, counseling, investment, and legal advice. Here is the website for ASB: [https://luckfort.github.io/ASBench/](https://luckfort.github.io/ASBench/).
+The Agent Security Bench (ASB) aims to systematically formalize and comprehensively evaluate a broad spectrum of adversarial attacks and defensive strategies tailored to LLM-based agents across 10 diverse scenarios, including but not limited to academic advising, counseling, investment, and legal advice.
 
-If you use our code or data in this repo or find our work helpful, please consider giving a citation:
-
-```
-@inproceedings{
-zhang2025agent,
-title={Agent Security Bench ({ASB}): Formalizing and Benchmarking Attacks and Defenses in {LLM}-based Agents},
-author={Hanrong Zhang and Jingyuan Huang and Kai Mei and Yifei Yao and Zhenting Wang and Chenlu Zhan and Hongwei Wang and Yongfeng Zhang},
-booktitle={The Thirteenth International Conference on Learning Representations},
-year={2025},
-url={https://openreview.net/forum?id=V4y0CpX4hK}
-}
-```
 ## ⚔️ LLM Agent Attacking Framework
 <p align="center">
 <img src="images/LLM Agent Attack.jpg">
@@ -30,12 +18,12 @@ The development of ASB is based on [AIOS](https://github.com/agiresearch/AIOS).
 
 Git clone ASB
 ```bash
-git clone https://github.com/Zhang-Henry/ASB.git
+git clone https://github.com/Zhang-Henry/AIOS_agent.git
 ```
 ```bash
-conda create -n ASB python=3.11
-source activate ASB
-cd ASB
+conda create -n AIOS python=3.11
+source activate AIOS
+cd AIOS
 ```
 You can install the dependencies using
 ```bash

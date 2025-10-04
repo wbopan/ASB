@@ -166,7 +166,7 @@ class Interactor:
     # Run the `conda list` command and capture the output
         reqs_path = os.path.join(self.base_folder, agent, "meta_requirements.txt")
 
-        result = subprocess.run(['conda', 'list'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(['conda', 'list'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
         # Decode the output from bytes to string
         with open(reqs_path, "r") as f:
             reqs = []

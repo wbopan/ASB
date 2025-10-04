@@ -26,6 +26,9 @@ class AgentFactory:
 
         self.agent_log_mode = agent_log_mode
 
+        # Cache for requirements check to avoid repeated conda list calls
+        self.reqs_checked_agents = set()
+
     def snake_to_camel(self, snake_str):
         components = snake_str.split('_')
         return ''.join(x.title() for x in components)
@@ -54,8 +57,11 @@ class AgentFactory:
         if not os.path.exists(os.path.join(script_dir, agent_name)):
             interactor.download_agent(agent_name)
 
-        if not interactor.check_reqs_installed(agent_name):
-            interactor.install_agent_reqs(agent_name)
+        # Check requirements only once per agent to avoid file descriptor leaks
+        if agent_name not in self.reqs_checked_agents:
+            if not interactor.check_reqs_installed(agent_name):
+                interactor.install_agent_reqs(agent_name)
+            self.reqs_checked_agents.add(agent_name)
 
         agent_class = self.load_agent_instance(agent_name)
 

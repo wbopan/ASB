@@ -137,7 +137,9 @@ def main():
         agent_log_mode=agent_log_mode,
     )
 
-    agent_thread_pool = ThreadPoolExecutor(max_workers=5000)
+    # Reduce max_workers to avoid file descriptor exhaustion
+    # Each worker may open multiple files (logs, subprocesses, etc.)
+    agent_thread_pool = ThreadPoolExecutor(max_workers=50)
 
     scheduler.start()
 

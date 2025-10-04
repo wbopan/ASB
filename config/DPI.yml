@@ -1,7 +1,7 @@
 injection_method: direct_prompt_injection
 attack_tool:
-  - all
-  # - agg
+  # - all
+  - agg
   # - non-agg
   # - test
 
@@ -25,9 +25,9 @@ llms:
 attack_types:
   # - combined_attack
   # - context_ignoring
-  - fake_completion
-  - escape_characters
+  # - fake_completion
+  # - escape_characters
   - naive
 
 # defense_type: dynamic_prompt_rewriting # delimiters_defense, direct_paraphrase_defense, instructional_prevention, dynamic_prompt_rewriting
-# suffix: test
+suffix: no_injection_user
