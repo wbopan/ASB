@@ -4,10 +4,12 @@
 
 from .llm_classes.model_registry import MODEL_REGISTRY
 from .llm_classes.hf_native_llm import HfNativeLLM
+from .llm_classes.gpt_llm import GPTLLM
 
 # standard implementation of LLM methods
 from .llm_classes.ollama_llm import OllamaLLM
 from .llm_classes.vllm import vLLM
+from .llm_classes.oai_llm import OAILLM
 
 class LLMKernel:
     def __init__(self,
@@ -36,6 +38,15 @@ class LLMKernel:
                     log_mode=log_mode
                 )
 
+            elif use_backend == "oai" or llm_name.startswith("oai/"):
+                self.model = OAILLM(
+                    llm_name=llm_name,
+                    max_gpu_memory=max_gpu_memory,
+                    eval_device=eval_device,
+                    max_new_tokens=max_new_tokens,
+                    log_mode=log_mode
+                )
+
             elif use_backend == "vllm":
                 self.model = vLLM(
                     llm_name=llm_name,
@@ -44,12 +55,17 @@ class LLMKernel:
                     max_new_tokens=max_new_tokens,
                     log_mode=log_mode
                 )
-            else: # use huggingface LLM without backend
+            elif use_backend == "hf": 
                 self.model = HfNativeLLM(
                     llm_name=llm_name,
                     max_gpu_memory=max_gpu_memory,
                     eval_device=eval_device,
                     max_new_tokens=max_new_tokens,
+                    log_mode=log_mode
+                )
+            else: # Use GPTLLM as 
+                self.model = GPTLLM(
+                    llm_name=llm_name,
                     log_mode=log_mode
                 )
 
