@@ -16,13 +16,24 @@ from tqdm import tqdm
 from datetime import datetime
 import torch, csv
 import numpy as np
-import random,json,os
+import random, json, os, re
 from openai import OpenAI
 
 # from pyopenagi.api_key import OPENAI_API_KEY
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
+
+
+def sanitize_for_filename(text, fallback="item", max_length=60):
+    value = str(text).strip() if text is not None else fallback
+    sanitized = re.sub(r"[^A-Za-z0-9]+", "_", value)
+    sanitized = sanitized.strip("_")
+    if not sanitized:
+        sanitized = fallback
+    if max_length and len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+    return sanitized
 
 def clean_cache(root_directory):
     targets = {
@@ -105,6 +116,18 @@ def main():
     parser = parse_global_args()
     args = parser.parse_args()
     print(args)
+    os.makedirs(args.res_dir, exist_ok=True)
+
+    csv_headers = [
+        "Agent Name",
+        "Attack Tool",
+        "Attack Successful",
+        "Original Task Successful",
+        "Refuse Result",
+        "Memory Found",
+        "Aggressive",
+        "messages",
+    ]
     llm_name = args.llm_name
     max_gpu_memory = args.max_gpu_memory
     eval_device = args.eval_device
@@ -142,22 +165,38 @@ def main():
     scheduler.start()
 
     agent_tasks = list()
+    agent_task_metadata = dict()
 
     attacker_tools_all = pd.read_json(args.attacker_tools_path, lines=True)
     tasks_path = pd.read_json(args.tasks_path, lines=True)
 
-    if os.path.exists(args.database):
+    vector_db = None
+    if args.read_db or args.write_db:
+        db_path = args.database
+        db_exists = os.path.exists(db_path)
         try:
             vector_db = Chroma(
-                persist_directory=args.database,
+                persist_directory=db_path,
                 embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv('OPENAI_API_KEY')),
             )
-            print(f"The database {args.database} has been created.")
+            if db_exists:
+                print(f"Loaded database from {db_path}.")
+            else:
+                print(f"Initialized new database at {db_path}.")
         except ValueError as e:
-            print(f"Error initializing Chroma for directory '{args.database}': {e}")
+            print(f"Error initializing Chroma for directory '{db_path}': {e}")
+            os.makedirs(db_path, exist_ok=True)
+            try:
+                vector_db = Chroma(
+                    persist_directory=db_path,
+                    embedding_function=OpenAIEmbeddings(openai_api_key=os.getenv('OPENAI_API_KEY')),
+                )
+                print(f"Created a new database at {db_path} after recovering from initialization error.")
+            except Exception as recover_error:
+                print(f"Failed to initialize Chroma database at '{db_path}' after recovery attempt: {recover_error}")
+                vector_db = None
     else:
-        print(f"The database {args.database} does not exist.")
-        vector_db = None
+        print("Database access disabled; proceeding without a vector store.")
 
 
     for _, agent_info in tasks_path.iterrows(): # iterate over each agent
@@ -185,6 +224,11 @@ def main():
                 )
 
                 agent_tasks.append(agent_attack)
+                agent_task_metadata[agent_attack] = {
+                    "agent_name": agent_name,
+                    "task": task,
+                    "attacker_tool": tool["Attacker Tool"]
+                }
 
     attack_succ = 0
     workflow_failure = 0
@@ -195,22 +239,12 @@ def main():
 
     with open(args.res_file, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow([
-            "Agent Name",
-            "Attack Tool",
-            "Attack Successful",
-            "Original Task Successful",
-            # "Workflow Failure",
-            "Refuse Result",
-            # "Task",
-            "Memory Found",
-            "Aggressive",
-            'messages'
-        ])
+        writer.writerow(csv_headers)
 
 
-    for r in as_completed(agent_tasks):
+    for idx, r in enumerate(as_completed(agent_tasks), start=1):
         res = r.result()
+        metadata = agent_task_metadata.get(r, {})
         print("**********************************")
         print(args)
 
@@ -241,19 +275,19 @@ def main():
         attack_tool = res["attacker_tool"]
         print(f"Attack Tool: {attack_tool}")
 
-        task = res["messages"][3]['content']
+        task_message_content = res["messages"][3]['content']
         memory_found_flag = None
 
         if args.read_db:
             memory_found = res["memory_found"]
-            print("Task: ", task)
+            print("Task: ", task_message_content)
             print("Memory search: ", res["memory_search"])
             print("Memory found: ", memory_found)
 
             if args.direct_prompt_injection:
-                task = task.split(';')[0]
+                task_message_content = task_message_content.split(';')[0]
 
-            if task in memory_found and res["attacker_tool"] in memory_found:
+            if task_message_content in memory_found and res["attacker_tool"] in memory_found:
                 memory_search_succ += 1
                 print("The memory search found attacker tool history successfully.")
                 memory_found_flag = True
@@ -274,23 +308,38 @@ def main():
 
         print("**********************************")
 
+        csv_row_values = [
+            res['agent_name'],
+            attack_tool,
+            1 if attack_successful else 0,
+            1 if original_successful else 0,
+            1 if refuse_res == '0' else 0,
+            "N/A" if memory_found_flag is None else (1 if memory_found_flag else 0),
+            1 if res['agg'] == 'True' else 0,
+            res["messages"]
+        ]
 
         # 保存结果到 CSV
         with open(args.res_file, mode='a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([
-                res['agent_name'],
-                attack_tool,
-                1 if attack_successful else 0,
-                1 if original_successful else 0,
-                # 1 if workflow_failure_flag else 0,
-                1 if refuse_res=='0' else 0,
-                # refuse_res,
-                # task.split(';')[0],
-                "N/A" if memory_found_flag is None else (1 if memory_found_flag else 0),
-                1 if res['agg'] == 'True' else 0,
-                res["messages"]
-            ])
+            writer.writerow(csv_row_values)
+
+        json_row = dict(zip(csv_headers, csv_row_values))
+        json_row["messages"] = res["messages"]
+        json_row["task"] = metadata.get("task", task_message_content)
+
+        agent_component = sanitize_for_filename(metadata.get("agent_name", res['agent_name']), fallback="agent")
+        tool_component = sanitize_for_filename(attack_tool, fallback="tool")
+        task_component = sanitize_for_filename(metadata.get("task", task_message_content), fallback="task")
+
+        file_components = [f"{idx:05d}", agent_component, tool_component]
+        if task_component:
+            file_components.append(task_component)
+        file_name = "_".join(file_components) + ".json"
+        file_path = os.path.join(args.res_dir, file_name)
+
+        with open(file_path, "w") as json_file:
+            json.dump(json_row, json_file, indent=2)
 
     # print(f"Results saved to {args.res_file}")
     print(f"Total number of attacks: {len(agent_tasks)}")

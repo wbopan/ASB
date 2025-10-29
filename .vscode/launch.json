@@ -26,7 +26,10 @@
                 "--task_num",
                 "1",
                 "--res_file",
-                "logs/qwen3-32b_debug.csv"
+                "logs/qwen3-32b_debug.csv",
+                "--res_dir",
+                "logs/qwen3-32b_debug_messages",
+                "--read_db"
             ]
         }
     ]

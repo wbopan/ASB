@@ -50,6 +50,7 @@ def parse_global_args():
     parser.add_argument("--write_db", action='store_true')
     parser.add_argument("--read_db", action='store_true')
     parser.add_argument("--res_file", type=str, default = 'logs/result_file.log', help="Path to the result file")
+    parser.add_argument("--res_dir", type=str, default='logs/message_logs', help="Directory to store per-sample JSON results")
 
     return parser
 
