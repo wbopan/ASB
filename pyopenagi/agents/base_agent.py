@@ -1,4 +1,5 @@
 import os
+import copy
 
 import json
 
@@ -68,6 +69,52 @@ class BaseAgent:
         self.set_created_time(time.time())
 
 
+    def _convert_raw_message(self, raw_message, fallback_content=None):
+        if raw_message is None:
+            return None
+
+        if hasattr(raw_message, "model_dump"):
+            message_dict = raw_message.model_dump()
+        elif hasattr(raw_message, "to_dict"):
+            message_dict = raw_message.to_dict()
+        elif isinstance(raw_message, dict):
+            message_dict = copy.deepcopy(raw_message)
+        else:
+            message_dict = {
+                "role": getattr(raw_message, "role", "assistant"),
+            }
+            content = getattr(raw_message, "content", None)
+            if content is not None:
+                message_dict["content"] = content
+
+        if "role" not in message_dict or message_dict["role"] is None:
+            message_dict["role"] = "assistant"
+
+        if not message_dict.get("content") and fallback_content is not None:
+            message_dict["content"] = fallback_content
+
+        return message_dict
+
+    def _append_response_message(self, response):
+        if response is None:
+            return None
+
+        fallback_content = getattr(response, "response_message", None)
+        raw_message = getattr(response, "raw_response", None)
+
+        message_dict = self._convert_raw_message(raw_message, fallback_content=fallback_content)
+
+        if message_dict is None and fallback_content is not None:
+            message_dict = {
+                "role": "assistant",
+                "content": fallback_content,
+            }
+
+        if message_dict is not None:
+            self.messages.append(message_dict)
+
+        return message_dict
+
     def run(self):
         '''Execute each step to finish the task.'''
         pass
@@ -77,31 +124,50 @@ class BaseAgent:
         pass
 
     def check_workflow(self, message):
-        try:
-            # print(f"Workflow message: {message}")
-            workflow = json.loads(message)
+        def parse_and_validate(text):
+            """Helper function to parse and validate workflow JSON"""
+            try:
+                workflow = json.loads(text)
 
-            if not isinstance(workflow, list):
-                workflow = [workflow]
+                if not isinstance(workflow, list):
+                    workflow = [workflow]
 
-            for step in workflow:
-                if "message" not in step or "tool_use" not in step:
-                    return None
+                for step in workflow:
+                    if "message" not in step or "tool_use" not in step:
+                        return None
 
-            return workflow
+                return workflow
 
-        except json.JSONDecodeError:
-            return None
+            except json.JSONDecodeError:
+                return None
+
+        # First, try to decode the full message
+        result = parse_and_validate(message)
+        if result is not None:
+            return result
+
+        # If that fails, split by \n\n and try the last component
+        components = message.split('\n\n')
+        if len(components) > 1:
+            last_component = components[-1].strip()
+            result = parse_and_validate(last_component)
+            if result is not None:
+                return result
+
+        return None
 
     def automatic_workflow(self):
+        last_response = None
         for i in range(self.plan_max_fail_times):
             response, start_times, end_times, waiting_times, turnaround_times = self.get_response(
-                query = Query(
-                    messages = self.messages,
-                    tools = None,
+                query=Query(
+                    messages=self.messages,
+                    tools=None,
                     message_return_type="json"
                 )
             )
+
+            last_response = response
 
             if self.rounds == 0:
                 self.set_start_time(start_times[0])
@@ -116,45 +182,44 @@ class BaseAgent:
             self.rounds += 1
 
             if workflow:
-                return workflow
+                return workflow, response
 
+            llm_name = getattr(getattr(self, "args", None), "llm_name", None)
+            fail_message = f"Fail {i+1} times to generate a valid plan. I need to regenerate a plan."
+
+            if llm_name == 'claude-3-5-sonnet-20240620':
+                self.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": fail_message
+                    }
+                )
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": f"Please try again. {fail_message}"
+                    }
+                )
             else:
-                if self.args.llm_name == 'claude-3-5-sonnet-20240620':
-                    self.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": f"Fail {i+1} times to generate a valid plan. I need to regenerate a plan."
-                        }
-                    )
-                    self.messages.append(
-                        {
-                            "role": "user",  # 作为用户输入的指令
-                            "content": f"Please try again. Fail {i+1} times to generate a valid plan. I need to regenerate a plan."
-                        }
-                    )
-                else:
-                    self.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": f"Fail {i+1} times to generate a valid plan. I need to regenerate a plan"
-                        }
-                    )
-                if i == self.plan_max_fail_times - 1:
-                    # self.messages.append(
-                    #     {
-                    #         "role": "assistant",
-                    #         "content": f"[Thinking]: {response.response_message}"
-                    #     }
-                    # )
+                self.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": fail_message
+                    }
+                )
+
+            if i == self.plan_max_fail_times - 1:
+                appended = self._append_response_message(response)
+                if appended is None and response is not None:
                     self.messages.append(
                         {
                             "role": "assistant",
                             "thinking": f"{response.response_message}"
                         }
                     )
-                    return None
+                return None, response
 
-        return None
+        return None, last_response
 
     def manual_workflow(self):
         pass

@@ -21,7 +21,8 @@ class Response:
     def __init__(
             self,
             response_message,
-            tool_calls: list = None
+            tool_calls: list = None,
+            raw_response = None,
         ) -> None:
         """Response format
 
@@ -32,6 +33,8 @@ class Response:
                 {"name": "xxx", "parameters": {}}
             ].
             Default to None.
+            raw_response (Any, optional): provider-specific raw payload.
         """
         self.response_message = response_message
         self.tool_calls = tool_calls
+        self.raw_response = raw_response

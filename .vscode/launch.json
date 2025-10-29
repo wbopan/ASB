@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug main_attacker (naive PI)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main_attacker.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--llm_name",
+                "/opt/share/models/Qwen/Qwen3-32B",
+                "--use_backend",
+                "oai",
+                "--max_new_tokens",
+                "4096",
+                "--direct_prompt_injection",
+                "--attack_type",
+                "naive",
+                "--attacker_tools_path",
+                "data/attack_tools_test.jsonl",
+                "--tasks_path",
+                "data/agent_task_test.jsonl",
+                "--task_num",
+                "1",
+                "--res_file",
+                "logs/qwen3-32b_debug.csv"
+            ]
+        }
+    ]
+}

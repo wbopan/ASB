@@ -1,5 +1,8 @@
 from .base_llm import BaseLLM
 import time
+import inspect
+import torch
+import multiprocessing as mp
 
 # could be dynamically imported similar to other models
 
@@ -28,23 +31,45 @@ class vLLM(BaseLLM):
 
     def load_llm_and_tokenizer(self) -> None:
         """ fetch the model from huggingface and run it """
-        self.available_gpus = list(self.max_gpu_memory.keys())
-        self.gpu_nums = len(self.available_gpus)
+        if self.max_gpu_memory:
+            self.available_gpus = list(self.max_gpu_memory.keys())
+            self.gpu_nums = len(self.available_gpus)
+        else:
+            if torch.cuda.is_available():
+                self.gpu_nums = torch.cuda.device_count()
+                self.available_gpus = list(range(self.gpu_nums))
+            else:
+                self.available_gpus = []
+                self.gpu_nums = 0
         try:
             import vllm
-        except ImportError:
+        except Exception as exc:
             raise ImportError(
                 "Could not import vllm python package. "
                 "Please install it with `pip install vllm`."
-            )
+            ) from exc
 
         """ only casual lms for now """
-        self.model = vllm.LLM(
-            model = self.model_name,
-            download_dir = get_from_env("HF_HOME"),
-            tensor_parallel_size = self.gpu_nums,
-            max_model_len=50000
-        )
+        llm_kwargs = {
+            "model": self.model_name,
+        }
+
+        try:
+            download_dir = get_from_env("HF_HOME")
+            llm_kwargs["download_dir"] = download_dir
+        except ValueError:
+            # Allow running without HF_HOME; vLLM will fallback to default cache
+            pass
+
+        if self.gpu_nums:
+            llm_kwargs["tensor_parallel_size"] = self.gpu_nums
+
+        try:
+            mp.set_start_method("spawn")
+        except RuntimeError:
+            pass
+
+        self.model = vllm.LLM(**llm_kwargs)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
@@ -85,6 +110,8 @@ class vLLM(BaseLLM):
             )
             # print(response)
             result = response[0].outputs[0].text
+
+            import ipdb; ipdb.set_trace()
 
             print(f"***** Result: {result} *****")
 

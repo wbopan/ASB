@@ -1,11 +1,14 @@
 import argparse
-import json
-import subprocess
-import requests
-import gzip
 import base64
-import sys
+import gzip
+import json
 import os
+import re
+import shutil
+import subprocess
+import sys
+
+import requests
 
 def list_available_agents():
     url = "https://openagi-beta.vercel.app/api/get_all_agents"
@@ -162,29 +165,68 @@ class Interactor:
         with open(code_path, 'w', newline='') as file:
             file.write(code_data)
 
+    def _parse_requirement_name(self, requirement_line: str) -> str:
+        """Extract bare package name from a requirement spec like 'foo>=1.0'."""
+        cleaned = requirement_line.split("#", 1)[0].strip()
+        if not cleaned:
+            return ""
+        parts = re.split(r"[<=>!~]", cleaned, maxsplit=1)
+        return parts[0].strip().lower()
+
+    def _gather_installed_packages(self) -> set[str] | None:
+        """
+        Collect installed package names using the active package manager.
+        Prefer `uv pip list` (uv-managed venv), then fall back to pip.
+        """
+        commands = []
+        if shutil.which("uv"):
+            commands.append(["uv", "pip", "list"])
+        if shutil.which("pip"):
+            commands.append(["pip", "list"])
+        commands.append([sys.executable, "-m", "pip", "list"])
+
+        for cmd in commands:
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=True,
+                )
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                continue
+
+            packages = set()
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line or line.lower().startswith("package") or line.startswith("-"):
+                    continue
+                package_name = line.split()[0].strip().lower()
+                if package_name:
+                    packages.add(package_name)
+            if packages:
+                return packages
+
+        return None
+
     def check_reqs_installed(self, agent):
-    # Run the `conda list` command and capture the output
+        # Prefer uv/pip based checks; conda is not assumed to exist.
         reqs_path = os.path.join(self.base_folder, agent, "meta_requirements.txt")
 
-        result = subprocess.run(['conda', 'list'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # Decode the output from bytes to string
         with open(reqs_path, "r") as f:
-            reqs = []
-            lines = f.readlines()
-            for line in lines:
-                line = line.replace("\n", "")
-                if "==" in line:
-                    reqs.append(line.split("==")[0])
-                else:
-                    reqs.append(line)
+            required_packages = []
+            for raw_line in f:
+                package_name = self._parse_requirement_name(raw_line)
+                if package_name:
+                    required_packages.append(package_name)
 
-        output = result.stdout.decode('utf-8')
+        installed_packages = self._gather_installed_packages()
+        if installed_packages is None:
+            # If we cannot determine installed packages, trigger installation.
+            return False
 
-        # Extract the list of installed packages
-        installed_packages = [line.split()[0] for line in output.splitlines() if line]
-
-        # Check for each package if it is installed
-        for req in reqs:
+        for req in required_packages:
             if req not in installed_packages:
                 return False
 
@@ -193,14 +235,29 @@ class Interactor:
 
     def install_agent_reqs(self, agent):
         reqs_path = os.path.join(self.base_folder, agent, "meta_requirements.txt")
-        subprocess.check_call([
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "-r",
-            reqs_path
-        ])
+        with open(reqs_path, "r") as reqs_file:
+            requirements = [
+                line.split("#", 1)[0].strip()
+                for line in reqs_file
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+
+        if not requirements:
+            return
+
+        if shutil.which("uv"):
+            subprocess.check_call(
+                ["uv", "add", *requirements]
+            )
+        else:
+            subprocess.check_call([
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                reqs_path
+            ])
 
 def parse_args():
     parser = argparse.ArgumentParser()

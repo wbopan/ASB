@@ -29,7 +29,7 @@ class OAILLM(BaseLLM):
 
     def load_llm_and_tokenizer(self) -> None:
         api_key = os.getenv("OPENAI_API_KEY", "EMPTY")
-        self.model = Open(base_url="http://127.0.0.1:8000", api_key=api_key)
+        self.model = Open(base_url="http://127.0.0.1:8001/v1", api_key=api_key)
         self.tokenizer = None
 
     def process(
@@ -37,6 +37,10 @@ class OAILLM(BaseLLM):
         agent_process,
         temperature=0.0,
     ):
+
+        # Hard code temperature to 0.7 for qwen3
+        temperature = 0.7
+
         agent_process.set_status("executing")
         agent_process.set_start_time(time.time())
 
@@ -67,20 +71,28 @@ class OAILLM(BaseLLM):
                     max_tokens=self.max_new_tokens,
                     temperature=temperature,
                 )
-                content = response.choices[0].message.content
+                raw_message = response.choices[0].message
+                content = raw_message.content
                 tool_calls = self.parse_tool_calls(content)
+
+                self.logger.log("*************** DEBUG TRACE ***************\n", level="info")
+                self.logger.log(f"messages: {formatted_messages}\n", level="info")
+                self.logger.log(f"response: {response.choices[0].message}\n", level="info")
+                self.logger.log("*************** END TRACE ***************\n", level="info")
 
                 if tool_calls:
                     agent_process.set_response(
                         Response(
                             response_message=None,
                             tool_calls=tool_calls,
+                            raw_response=raw_message,
                         )
                     )
                 else:
                     agent_process.set_response(
                         Response(
                             response_message=content,
+                            raw_response=raw_message,
                         )
                     )
             except Exception as e:
@@ -97,7 +109,13 @@ class OAILLM(BaseLLM):
                     max_tokens=self.max_new_tokens,
                     temperature=temperature,
                 )
-                result = response.choices[0].message.content
+                raw_message = response.choices[0].message
+                result = raw_message.content
+
+                self.logger.log("*************** DEBUG TRACE ***************\n", level="info")
+                self.logger.log(f"messages: {messages}\n", level="info")
+                self.logger.log(f"response: {response.choices[0].message}\n", level="info")
+                self.logger.log("*************** END TRACE ***************\n", level="info")
 
                 if message_return_type == "json":
                     result = self.parse_json_format(result)
@@ -105,6 +123,7 @@ class OAILLM(BaseLLM):
                 agent_process.set_response(
                     Response(
                         response_message=result,
+                        raw_response=raw_message,
                     )
                 )
             except Exception as e:

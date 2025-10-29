@@ -131,16 +131,25 @@ class ReactAgent(BaseAgent):
         self.logger.log(f"{task_input}\n", level="info")
 
         workflow = None
+        workflow_response = None
 
         if self.workflow_mode == "automatic": # 确定工作流程模式（自动或手动）并执行相应的工作流程。
-            workflow = self.automatic_workflow()
+            workflow_result = self.automatic_workflow()
         else:
             assert self.workflow_mode == "manual"
-            workflow = self.manual_workflow()
+            workflow_result = self.manual_workflow()
 
-        self.messages.append(
-            {"role": "assistant", "content": f"[Thinking]: The workflow generated for the problem is {json.dumps(workflow)}"}
-        )
+        if isinstance(workflow_result, tuple) and len(workflow_result) == 2:
+            workflow, workflow_response = workflow_result
+        else:
+            workflow = workflow_result
+
+        appended_plan_message = self._append_response_message(workflow_response)
+
+        if appended_plan_message is None and workflow is not None:
+            self.messages.append(
+                {"role": "assistant", "content": f"[Thinking]: The workflow generated for the problem is {json.dumps(workflow)}"}
+            )
 
         self.logger.log("*********************************\n", level="info")
         self.logger.log(f"Generated {self.workflow_mode} workflow is: {workflow}\n", level="info")
@@ -174,12 +183,12 @@ class ReactAgent(BaseAgent):
                     self.set_start_time(start_times[0])
 
                 # execute action
-                response_message = response.response_message
-
                 tool_calls = response.tool_calls
 
                 self.request_waiting_times.extend(waiting_times)
                 self.request_turnaround_times.extend(turnaround_times)
+
+                appended_message = self._append_response_message(response)
 
                 if tool_calls:
                     for _ in range(self.plan_max_fail_times):
@@ -196,8 +205,8 @@ class ReactAgent(BaseAgent):
                         )
                         if success:
                             break
-                else:
-                    thinkings = response_message
+                elif appended_message is None:
+                    thinkings = response.response_message
                     self.messages.append({
                         "role": "assistant",
                         "content": thinkings

@@ -1,0 +1,45 @@
+[project]
+name = "asb"
+version = "0.1.0"
+description = "Agent Security Bench (ASB): Formalizing and benchmarking attacks and defenses in LLM-based agents."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { file = "LICENSE" }
+dependencies = [
+    "google-generativeai",
+    "openai>=1.52.0,<2.0.0",
+    "pandas==2.2.2",
+    "protobuf==4.25.3",
+    "pydantic>=2.9.2",
+    "Pympler==1.0.1",
+    "click==8.1.7",
+    "python-dotenv",
+    "ollama",
+    "langchain-chroma",
+    "langchain-openai",
+    "pyairports",
+    "fastapi",
+    "torch",
+    "transformers",
+    "accelerate",
+    "anthropic",
+    "ipdb>=0.13.13",
+]
+
+[project.optional-dependencies]
+# Extra packages for CUDA-enabled usage
+cuda = [
+    "vllm>=0.10.0",
+]
+
+[dependency-groups]
+# Development tooling (not included in the base environment by default)
+dev = [
+    "pre-commit",
+    "pytest",
+    "ruff",
+]
+
+[tool.uv]
+# Match prior behavior (install base deps by default, dev on demand)
+default-groups = []

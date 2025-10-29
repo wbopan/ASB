@@ -26,9 +26,9 @@ class BaseLLM(ABC):
 
         self.model_name = llm_name
         self.context_manager = SimpleContextManager()
+        self.logger = self.setup_logger()
 
         self.load_llm_and_tokenizer()
-        self.logger = self.setup_logger()
 
         self.logger.log(
             "AIOS LLM successfully loaded.\n",
@@ -37,6 +37,8 @@ class BaseLLM(ABC):
 
     def convert_map(self, map: dict) -> dict:
         """ helper utility to convert the keys of a map to int """
+        if not map:
+            return {}
         new_map = {}
         for k,v in map.items():
             new_map[int(k)] = v

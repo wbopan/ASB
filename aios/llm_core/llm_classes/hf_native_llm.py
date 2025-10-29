@@ -1,5 +1,6 @@
 # Run models from huggingface using the transformers library
 
+import os
 import torch
 from .constant import MODEL_CLASS
 from .base_llm import BaseLLM
@@ -18,9 +19,17 @@ class HfNativeLLM(BaseLLM):
         """ fetch the model from huggingface and run it """
         self.max_gpu_memory = self.convert_map(self.max_gpu_memory)
 
-        self.auth_token = get_from_env("HF_AUTH_TOKENS")
+        try:
+            self.auth_token = get_from_env("HF_AUTH_TOKENS")
+        except ValueError:
+            self.auth_token = None
+
+        # transformers optionally imports torchvision; disable to avoid runtime
+        # errors when torchvision ops are unavailable in the environment.
+        os.environ.setdefault("TRANSFORMERS_SKIP_TORCHVISION_IMPORT", "1")
 
         """ only casual lms for now """
+        self.model_type = self.check_model_type(self.model_name)
         self.model = MODEL_CLASS[self.model_type].from_pretrained(
             self.model_name,
             device_map="auto",

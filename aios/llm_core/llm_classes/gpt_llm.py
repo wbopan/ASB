@@ -73,6 +73,12 @@ class GPTLLM(BaseLLM):
             tool_calls = self.parse_tool_calls(
                 response.choices[0].message.tool_calls
             )
+            self.logger.log(f"*************** TRACE ***************", level="info")
+            self.logger.log(f"message = {messages}", level="info")
+            self.logger.log(f"tools = {agent_process.query.tools}", level="info")
+            self.logger.log(f"response_message = {response.choices[0].message}", level="info")
+            self.logger.log(f"*************** END TRACE ***************", level="info")
+
             # print(tool_calls)
             # print(response.choices[0].message)
             agent_process.set_response(
